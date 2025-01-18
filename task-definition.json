@@ -1,0 +1,33 @@
+{
+  "family": "taskmaster",
+  "networkMode": "awsvpc",
+  "executionRoleArn": "arn:aws:iam::841162667281:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "taskmaster",
+      "image": "841162667281.dkr.ecr.us-east-1.amazonaws.com/taskmaster",
+      "memory": 512,
+      "cpu": 256,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/taskmaster",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "taskRoleArn": "arn:aws:iam::841162667281:role/ecsTaskExecutionRole"
+}
