@@ -5,7 +5,7 @@
   "containerDefinitions": [
     {
       "name": "taskmaster",
-      "image": "841162667281.dkr.ecr.us-east-1.amazonaws.com/taskmaster",
+      "image": "841162667281.dkr.ecr.us-east-1.amazonaws.com/taskmaster:ae89f5f1f06eb84f95d9ce53e24c6c0fa3b743a2",
       "memory": 512,
       "cpu": 256,
       "essential": true,
