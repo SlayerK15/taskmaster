@@ -52,7 +52,7 @@ jobs:
     - name: Log in to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v1
 
-        # Step 6: Build, tag, and push Docker image to Amazon ECR
+    # Step 6: Build, tag, and push Docker image to Amazon ECR
     - name: Build and push Docker image
       id: build-image
       env:
@@ -67,10 +67,16 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-        # Output the image URI for subsequent steps
+        # Output the image URI for use in subsequent steps
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    # Step 7: Update ECS task definition with the new Docker image
+    # Step 7: Download current ECS task definition or use a local template
+    - name: Download current ECS task definition
+      run: |
+        aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+        --query taskDefinition > task-definition.json || echo "Using local task-definition.json"
+
+    # Step 8: Update ECS task definition with the new Docker image
     - name: Update ECS task definition
       id: task-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -79,8 +85,7 @@ jobs:
         container-name: ${{ env.CONTAINER_NAME }}
         image: ${{ steps.build-image.outputs.image }}
 
-
-    # Step 8: Deploy ECS task definition
+    # Step 9: Deploy ECS task definition
     - name: Deploy ECS task definition
       uses: aws-actions/amazon-ecs-deploy-task-definition@v1
       with:
@@ -89,7 +94,7 @@ jobs:
         cluster: ${{ env.ECS_CLUSTER }}
         wait-for-service-stability: true
 
-    # Step 9: Post-deployment verification
+    # Step 10: Post-deployment verification
     - name: Verify deployment status
       run: |
         echo "Waiting for ECS service to stabilize..."
