@@ -21,7 +21,6 @@ jobs:
   deploy:
     name: Deploy to Amazon ECS
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
     # Step 1: Checkout repository
@@ -52,31 +51,35 @@ jobs:
     - name: Log in to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v1
 
-    # Step 6: Build, tag, and push Docker image to Amazon ECR
+    # Step 6: Build and push Docker image
     - name: Build and push Docker image
       id: build-image
       env:
         ECR_REGISTRY: 841162667281.dkr.ecr.us-east-1.amazonaws.com
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        # Build Docker image
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-        # Push Docker image to Amazon ECR
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-        # Output the image URI for use in subsequent steps
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    # Step 7: Download current ECS task definition or use a local template
-    - name: Download current ECS task definition
+    # Step 7: Prepare ECS task definition
+    - name: Prepare ECS task definition
       run: |
-        aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
-        --query taskDefinition > task-definition.json || echo "Using local task-definition.json"
+        if aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} > /dev/null 2>&1; then
+          aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+          --query 'taskDefinition' > task-definition.json
+        else
+          echo "No existing task definition found. Using local template."
+          cp infrastructure/task-definition.json task-definition.json
+        fi
 
-    # Step 8: Update ECS task definition with the new Docker image
+    # Debug the task definition file
+    - name: Debug Task Definition
+      run: cat task-definition.json
+
+    # Step 8: Update ECS task definition
     - name: Update ECS task definition
       id: task-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -93,25 +96,3 @@ jobs:
         service: ${{ env.ECS_SERVICE }}
         cluster: ${{ env.ECS_CLUSTER }}
         wait-for-service-stability: true
-
-    # Step 10: Post-deployment verification
-    - name: Verify deployment status
-      run: |
-        echo "Waiting for ECS service to stabilize..."
-        aws ecs wait services-stable \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --services ${{ env.ECS_SERVICE }}
-
-        echo "Checking ECS service health..."
-        SERVICE_STATUS=$(aws ecs describe-services \
-          --cluster ${{ env.ECS_CLUSTER }} \
-          --services ${{ env.ECS_SERVICE }} \
-          --query 'services[0].status' \
-          --output text)
-
-        if [ "$SERVICE_STATUS" != "ACTIVE" ]; then
-          echo "ECS service is not active. Status: $SERVICE_STATUS"
-          exit 1
-        fi
-
-        echo "Deployment completed successfully!"
