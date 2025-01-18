@@ -32,3 +32,7 @@ variable "container_memory" {
   description = "Container memory in MiB"
   default     = 512
 }
+variable "image_uri" {
+  description = "Docker image URI for ECS task"
+  type        = string
+}
