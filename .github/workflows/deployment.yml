@@ -72,7 +72,7 @@ jobs:
           --query 'taskDefinition' > task-definition.json
         else
           echo "No existing task definition found. Using local template."
-          cp infrastructure/task-definition.json task-definition.json
+          cp task-definition.json task-definition.json
         fi
 
     # Debug the task definition file
