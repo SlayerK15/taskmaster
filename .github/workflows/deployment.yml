@@ -1,4 +1,4 @@
-name: Deploy to Amazon ECS
+name: Deploy Application to AWS ECS with Terraform
 
 on:
   push:
@@ -9,22 +9,19 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: taskmaster
-  ECS_SERVICE: taskmaster
-  ECS_CLUSTER: taskmaster-cluster
-  ECS_TASK_DEFINITION: taskmaster
-  CONTAINER_NAME: taskmaster
+  IMAGE_TAG: ${{ github.sha }}
 
 permissions:
   contents: read
 
 jobs:
   deploy:
-    name: Deploy to Amazon ECS
+    name: Build, Push Docker Image and Deploy with Terraform
     runs-on: ubuntu-latest
 
     steps:
     # Step 1: Checkout repository
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v3
 
     # Step 2: Set up Java JDK
@@ -51,48 +48,37 @@ jobs:
     - name: Log in to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v1
 
-    # Step 6: Build and push Docker image
+    # Step 6: Build, tag, and push Docker image to Amazon ECR
     - name: Build and push Docker image
       id: build-image
       env:
         ECR_REGISTRY: 841162667281.dkr.ecr.us-east-1.amazonaws.com
-        IMAGE_TAG: ${{ github.sha }}
       run: |
+        # Build Docker image
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+        # Push Docker image to Amazon ECR
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    # Step 7: Prepare ECS task definition
-    - name: Prepare ECS task definition
-      run: |
-        if aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} > /dev/null 2>&1; then
-          aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
-          --query 'taskDefinition' > task-definition.json
-        else
-          echo "No existing task definition found. Using local template."
-          cp infrastructure/task-definition.json task-definition.json
-        fi
+        # Output the image URI for use in Terraform
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-    # Debug the task definition file
-    - name: Debug Task Definition
-      run: cat task-definition.json
-
-    # Step 8: Update ECS task definition
-    - name: Update ECS task definition
-      id: task-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1
+    # Step 7: Set up Terraform
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v2
       with:
-        task-definition: task-definition.json
-        container-name: ${{ env.CONTAINER_NAME }}
-        image: ${{ steps.build-image.outputs.image }}
+        terraform_version: 1.5.0
 
-    # Step 9: Deploy ECS task definition
-    - name: Deploy ECS task definition
-      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-      with:
-        task-definition: ${{ steps.task-def.outputs.task-definition }}
-        service: ${{ env.ECS_SERVICE }}
-        cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
+    # Step 8: Initialize Terraform
+    - name: Initialize Terraform
+      run: terraform init
+
+    # Step 9: Plan Terraform deployment
+    - name: Terraform Plan
+      run: terraform plan -var "image_uri=${{ env.image }}" -out=tfplan
+
+    # Step 10: Apply Terraform configuration
+    - name: Terraform Apply
+      run: terraform apply -auto-approve tfplan
